@@ -32,3 +32,5 @@ $ poetry run python ui.py
 ```
 Navigate to [UI](http://127.0.0.1:7860/)
 
+![UI](images/ui.png)
+

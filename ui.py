@@ -35,7 +35,7 @@ TOP_K_RERANK = 4
 MAX_EMB_TOKENS = 512
 CHUNK_OVERLAP  = 32
 
-# Optimize MaxOS
+# Optimize MacOS
 IS_MAC = platform.system() == "Darwin"
 if torch.cuda.is_available():
     device = "cuda"
@@ -206,6 +206,7 @@ class RAGState:
         self.corpus_metas: List[dict] = []
         self.bm25: Optional[BM25Store] = None
         self.ready: bool = False
+        self.show_context: bool = False
 
     def reset(self):
         self.__init__()
@@ -306,11 +307,10 @@ def chat_infer(message: str, history: List[dict], state: RAGState) -> List[dict]
         "\n\nCite facts like (Source 2)."
     )
 
-    # Add user and immediate context response to history
     history.append({"role": "user", "content": q})
-    history.append({"role": "assistant", "content": context_md})
+    if state.show_context:
+        history.append({"role": "assistant", "content": context_md})
 
-    # Now call the LLM
     _ensure_models_loaded()
     resp = _together.chat.completions.create(
         model=TOGETHER_MODEL,
@@ -349,12 +349,20 @@ def build_ui():
         with gr.Row():
             send_btn = gr.Button("Send")
             clear_btn = gr.ClearButton([chatbot, user_in], value="Clear Chat")
+        
+        show_context_toggle = gr.Checkbox(label="Show Retrieval Context", value=False)
 
         def _connect(db_path):
             s, ok = connect_vectordb(db_path, state)
             return s, ok
 
         connect_btn.click(_connect, inputs=[db_folder], outputs=[status, connected])
+
+        def _toggle_show_context(val):
+            state.show_context = val
+            return
+
+        show_context_toggle.change(_toggle_show_context, inputs=[show_context_toggle], outputs=[])
 
         def _respond(msg, chat_history):
             updated_history = chat_infer(msg, chat_history or [], state)
@@ -368,4 +376,5 @@ def build_ui():
 if __name__ == "__main__":
     demo = build_ui()
     demo.launch()
+
 

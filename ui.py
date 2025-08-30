@@ -15,13 +15,17 @@ from rank_bm25 import BM25Okapi
 from transformers import CLIPModel, CLIPProcessor, AutoTokenizer
 from together import Together
 
-# Env
+# ---------------------------
+# Environment & logging
+# ---------------------------
 load_dotenv(override=True)
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 warnings.filterwarnings("ignore", category=UserWarning, module="transformers")
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
-# Models
+# ---------------------------
+# Constants
+# ---------------------------
 TEXT_MODEL     = "BAAI/bge-base-en-v1.5"
 RERANK_MODEL   = "BAAI/bge-reranker-base"
 CLIP_MODEL     = "openai/clip-vit-base-patch32"
@@ -35,7 +39,9 @@ TOP_K_RERANK = 4
 MAX_EMB_TOKENS = 512
 CHUNK_OVERLAP  = 32
 
-# Optimize MacOS
+# ---------------------------
+# Device setup
+# ---------------------------
 IS_MAC = platform.system() == "Darwin"
 if torch.cuda.is_available():
     device = "cuda"
@@ -53,14 +59,18 @@ try:
 except Exception:
     pass
 
+# ---------------------------
 # Lazy globals
+# ---------------------------
 _tokenizer: Optional[AutoTokenizer] = None
 _reranker: Optional[CrossEncoder] = None
 _clip_model: Optional[CLIPModel] = None
 _clip_proc: Optional[CLIPProcessor] = None
 _together: Optional[Together] = None
 
+# ---------------------------
 # Embedding helpers
+# ---------------------------
 def _ensure_models_loaded():
     global _tokenizer, _reranker, _clip_model, _clip_proc, _together
     if _tokenizer is None:
@@ -139,7 +149,10 @@ class CLIPTextEF(EmbeddingFunction):
 
 clip_text_ef = None
 
-# Retrieval utils
+# ---------------------------
+# Retrieval utilities
+# ---------------------------
+
 def mmr_select(query_emb, doc_embs, docs, metas, k=20, weight=0.6):
     query_emb = np.asarray(query_emb, dtype=np.float32)
     doc_embs = np.asarray(doc_embs, dtype=np.float32)
@@ -195,7 +208,9 @@ def rerank_ctx(query: str, docs: List[str], metas: List[dict], keep=TOP_K_RERANK
 def embed_query_together(text: str) -> np.ndarray:
     return np.array(embed_text_token_safe(text), dtype=np.float32)
 
+# ---------------------------
 # App state
+# ---------------------------
 class RAGState:
     def __init__(self):
         self.db_path: Optional[str] = None
@@ -206,12 +221,16 @@ class RAGState:
         self.corpus_metas: List[dict] = []
         self.bm25: Optional[BM25Store] = None
         self.ready: bool = False
+        self.together_model: str = TOGETHER_MODEL
         self.show_context: bool = False
 
     def reset(self):
         self.__init__()
 
+# ---------------------------
 # Connect to Chroma DB
+# ---------------------------
+
 def connect_vectordb(db_folder: str, state: RAGState) -> Tuple[str, dict]:
     if not db_folder:
         return ("❌ Please provide a folder path to your Chroma DB.", gr.update(value=False))
@@ -256,7 +275,10 @@ def connect_vectordb(db_folder: str, state: RAGState) -> Tuple[str, dict]:
     except Exception as e:
         return (f"❌ Failed to connect: {e}", gr.update(value=False))
 
+# ---------------------------
 # Chat handler
+# ---------------------------
+
 def chat_infer(message: str, history: List[dict], state: RAGState) -> List[dict]:
     if not state.ready:
         return history + [{"role": "assistant", "content": "Please connect to your Chroma DB first."}]
@@ -313,7 +335,7 @@ def chat_infer(message: str, history: List[dict], state: RAGState) -> List[dict]
 
     _ensure_models_loaded()
     resp = _together.chat.completions.create(
-        model=TOGETHER_MODEL,
+        model=state.together_model or TOGETHER_MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.2,
     )
@@ -322,7 +344,10 @@ def chat_infer(message: str, history: List[dict], state: RAGState) -> List[dict]
     history.append({"role": "assistant", "content": "🧠 LLM response:\n" + answer})
     return history
 
+# ---------------------------
 # UI definition
+# ---------------------------
+
 css = """
 #status {min-height: 38px}
 """
@@ -342,6 +367,9 @@ def build_ui():
             db_folder = gr.Textbox(label="Chroma DB folder", value=str(Path("./chroma_db").resolve()), scale=4)
             connect_btn = gr.Button("🔌 Connect", variant="primary", scale=1)
             connected = gr.Checkbox(label="Connected", value=False, interactive=False)
+        with gr.Row():
+            model_tb = gr.Textbox(label="Together LLM model", value=TOGETHER_MODEL, scale=4)
+            model_btn = gr.Button("Update Model", scale=1)
         status = gr.Markdown("", elem_id="status")
 
         chatbot = gr.Chatbot(height=420, type="messages")
@@ -357,6 +385,12 @@ def build_ui():
             return s, ok
 
         connect_btn.click(_connect, inputs=[db_folder], outputs=[status, connected])
+
+        def _set_model(m):
+            state.together_model = (m or TOGETHER_MODEL).strip()
+            return gr.update(value=f"🧠 Model set to `{state.together_model}`")
+
+        model_btn.click(_set_model, inputs=[model_tb], outputs=[status])
 
         def _toggle_show_context(val):
             state.show_context = val

@@ -13,7 +13,7 @@ Update .env with together.ai api KEY
 $ cp .env-example .env
 ```
 ## Ingest
-Place documents you want to ingest in the docs directory and run ingest pipeline. The chromadb is writted to the chroma_db directory.
+Place documents you want to ingest in the docs directory and run ingest pipeline (I have left the manual example so remove that if not using under docs). The chromadb is written to the chroma_db directory.
 
 ```bash
 $ poetry run python ingest.py

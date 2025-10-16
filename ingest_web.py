@@ -1,32 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-"""
-Universal, robust website crawler + Together embeddings → Chroma DB ingester.
-
-Enhanced for any type of website with multiple fallback strategies:
-- JavaScript rendering support (Selenium + Playwright)
-- Multiple sitemap discovery methods
-- Anti-bot evasion techniques
-- Content extraction for different site types
-- Duplicate detection and URL normalization
-- Configurable crawling strategies
-
-Usage:
-  python ingest_robust_web.py --url https://example.com --max-pages 100 --chroma ./chroma_db
-
-Features:
-- Automatically detects if site needs JavaScript rendering
-- Tries multiple User-Agents and headers
-- Discovers sitemaps from multiple sources
-- Extracts content using readability algorithms
-- Handles rate limiting and retries intelligently
-- Works with blogs, e-commerce, documentation, news sites, etc.
-
-Env:
-  TOGETHER_API_KEY must be set (dotenv supported)
-"""
-
 import os, sys, time, textwrap, warnings, logging, json, platform, re, hashlib, random
 from pathlib import Path
 from typing import List, Set, Tuple, Dict, Optional, Union
@@ -71,7 +42,7 @@ from tqdm import tqdm
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 from langchain_community.docstore.document import Document
 
-# ------------------ Env / Logging ------------------
+# Env / Logging
 load_dotenv(override=True)
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -80,7 +51,7 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 
 CHROMA_DIR = Path("./chroma_db")
 
-# ------------------ Models / Config ----------------
+# Models / Config 
 TEXT_MODEL     = "BAAI/bge-base-en-v1.5"   # Together embeddings (512-token limit)
 MAX_EMB_TOKENS = 480
 CHUNK_OVERLAP  = 32
@@ -137,7 +108,7 @@ tokenizer = AutoTokenizer.from_pretrained(TEXT_MODEL, use_fast=True)
 # User agent rotation
 ua = UserAgent()
 
-# ------------------ Enhanced Data Classes ------------------
+# Enhanced Data Classes
 @dataclass(frozen=True)
 class CrawlConfig:
     """Configuration for web crawling behavior."""
@@ -180,7 +151,7 @@ class Page:
         content_hash = hashlib.md5(self.content.encode('utf-8')).hexdigest()
         object.__setattr__(self, 'content_hash', content_hash)
 
-# ------------------ Embedding helpers (same as before) ------------------
+# Embedding helpers 
 class SciEmbedding(EmbeddingFunction):
     """Schema-only embedding fn that matches inference."""
     def __init__(self):
@@ -256,7 +227,7 @@ def embed_texts_token_safe_batch(texts: List[str], chunk_batch_size: int = 96) -
         out.append((np.mean(np.array(vecs, dtype=np.float32), axis=0)).tolist())
     return out
 
-# ------------------ Enhanced URL helpers ------------------
+# Enhanced URL helpers
 def normalize_url(base: str, href: str) -> Optional[str]:
     """Normalize and clean URLs."""
     if not href:
@@ -316,7 +287,7 @@ def under_path(u: str, root: str) -> bool:
     except:
         return False
 
-# ------------------ Enhanced Session Management ------------------
+# Enhanced Session Management 
 def create_robust_session(config: CrawlConfig) -> requests.Session:
     """Create a robust session with retries and realistic headers."""
     session = requests.Session()
@@ -353,7 +324,7 @@ def create_robust_session(config: CrawlConfig) -> requests.Session:
     session.headers.update(headers)
     return session
 
-# ------------------ JavaScript Rendering ------------------
+# JavaScript Rendering 
 class JavaScriptRenderer:
     """Handles JavaScript rendering using Selenium or Playwright."""
     
@@ -457,7 +428,7 @@ class JavaScriptRenderer:
             
         return None
 
-# ------------------ Enhanced Content Extraction ------------------
+# Enhanced Content Extraction 
 def extract_main_content(soup: BeautifulSoup, url: str = "") -> Tuple[str, str, str]:
     """
     Enhanced content extraction that works well with different site types.
@@ -632,7 +603,7 @@ def html_to_markdown_enhanced(soup: BeautifulSoup) -> str:
     
     return text.strip()
 
-# ------------------ Sitemap Discovery ------------------
+# Sitemap Discovery 
 def discover_sitemaps(base_url: str, session: requests.Session, robots_content: str = None) -> List[str]:
     """
     Discover sitemaps using multiple strategies.
@@ -717,7 +688,7 @@ def parse_sitemap(sitemap_url: str, session: requests.Session) -> List[str]:
         print(f"Error parsing sitemap {sitemap_url}: {e}")
         return urls
 
-# ------------------ Robots.txt Handling ------------------
+# Robots.txt Handling 
 def is_allowed_by_robots(url: str, rp: robotparser.RobotFileParser, config: CrawlConfig) -> bool:
     """Enhanced robots.txt checking with fallbacks."""
     if not config.respect_robots_txt:
@@ -752,7 +723,7 @@ def is_allowed_by_robots(url: str, rp: robotparser.RobotFileParser, config: Craw
         # Be lenient if robots.txt parsing fails
         return True
 
-# ------------------ Main Crawler Class ------------------
+# Main Crawler Class
 class RobustWebCrawler:
     """Main crawler class with multiple fallback strategies."""
     
@@ -1002,7 +973,7 @@ class RobustWebCrawler:
         
         return pages
 
-# ------------------ Chunking (same as before) ------------------
+# Chunking (same as before) 
 def md_split(docs, chunk=800, overlap=80):
     header = MarkdownHeaderTextSplitter(headers_to_split_on=[("#","h1"), ("##","h2"), ("###","h3")])
     rc     = RecursiveCharacterTextSplitter(chunk_size=chunk, chunk_overlap=overlap)
@@ -1018,7 +989,7 @@ def md_split(docs, chunk=800, overlap=80):
     print(f"{len(out)} chunks ({time.time()-t0:.1f}s)\n")
     return out
 
-# ------------------ Build Chroma (same as before) ------------------
+# Build Chroma 
 def build_stores_from_pages(pages: List[Page], client, chunk_size: int = 800, chunk_overlap: int = 80):
     """Convert pages to documents, chunk, embed, and store."""
     docs: List[Document] = []
@@ -1081,7 +1052,7 @@ def build_stores_from_pages(pages: List[Page], client, chunk_size: int = 800, ch
     pbar_text.close()
     print("Vector DB ready\n")
 
-# ------------------ CLI ------------------
+# CLI 
 def main():
     import argparse
     
@@ -1125,25 +1096,25 @@ def main():
         random_delays=not args.no_random_delays
     )
     
-    print(f"🚀 Starting robust crawl of {args.url}")
-    print(f"📊 Max pages: {config.max_pages}, JS: {config.use_javascript}, Sitemaps: {config.enable_sitemap_discovery}")
+    print(f"Starting robust crawl of {args.url}")
+    print(f"Max pages: {config.max_pages}, JS: {config.use_javascript}, Sitemaps: {config.enable_sitemap_discovery}")
     
     # Crawl the website
     with RobustWebCrawler(config) as crawler:
         pages = crawler.crawl(args.url)
     
     if not pages:
-        print("❌ No pages collected; exiting.")
+        print("No pages collected; exiting.")
         return
     
-    print(f"✅ Collected {len(pages)} pages")
+    print(f"Collected {len(pages)} pages")
     
     # Store in Chroma
     chroma_dir = Path(args.chroma)
     client = chromadb.PersistentClient(path=str(chroma_dir), settings=Settings(anonymized_telemetry=False))
     build_stores_from_pages(pages, client, chunk_size=args.chunk, chunk_overlap=args.overlap)
     
-    print(f"🎉 Successfully crawled and stored {len(pages)} pages in {chroma_dir}")
+    print(f"Successfully crawled and stored {len(pages)} pages in {chroma_dir}")
 
 if __name__ == "__main__":
     main()
